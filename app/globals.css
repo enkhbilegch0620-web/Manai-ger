@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+/* Figma дээрх өнгөнүүд. Классын жишээ: bg-bg, text-muted, border-line, bg-dark */
+@theme {
+  --color-bg: #f4f4f5;
+  --color-ink: #18181b;
+  --color-muted: #71717a;
+  --color-line: #d4d4d8;
+  --color-soft: #e4e4e7;
+  --color-dark: #27272a;
+  --color-danger: #b91c1c;
+  --color-note: #2563eb;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), "Segoe UI", Arial, sans-serif;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-tap-highlight-color: transparent;
+}
