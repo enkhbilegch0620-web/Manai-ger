@@ -12,7 +12,12 @@ npm run dev
 
 Хөтөч дээр http://localhost:3000 хаягийг нээнэ. Нэвтрэх хуудас: http://localhost:3000/login
 
-Туршилтын нэрс: **Ээж**, **Тувшин**, **Админ** (PIN `1234`). **Аав** анх нэвтэрч байгаа тул PIN үүсгэнэ.
+Туршилтын нэвтрэх нэрс (`supabase/04_seed.sql`-тэй ижил, бүгд PIN `1234`): **bat_eej** (Ээж), **bat_aav** (Аав), **bat_tuvshin** (Түвшин), **admin**. **bat_saraa** анх нэвтэрч байгаа тул PIN үүсгэнэ.
+
+### Supabase-тэй холбох
+
+`.env.local.example` файлыг `.env.local` нэрээр хуулж, Supabase-ийн түлхүүрүүдийг бөглөнө. Түлхүүр байхгүй бол апп туршилтын өгөгдлөөр ажиллана (`lib/auth-shared.ts` → `USE_MOCK`).
+Vercel дээр мөн адил гурван утгыг **Settings → Environment Variables**-д нэмнэ.
 
 ## Хуудсууд
 

@@ -5,7 +5,8 @@ export type Role = "admin" | "parent" | "child";
 
 export type Member = {
   id: number;
-  name: string;
+  username: string; // нэвтрэх нэр (латин), supabase/04_seed.sql-тэй ижил
+  name: string; // харагдах нэр
   role: Role;
   familyId: number | null;
   hasPin: boolean;
@@ -38,18 +39,19 @@ export type DaySchedule =
 
 export const families = [
   { id: 1, name: "Батын гэр" },
-  { id: 2, name: "Доржийн гэр" },
+  { id: 2, name: "Дорждын гэр" },
 ];
 
 export const members: Member[] = [
-  { id: 1, name: "Админ", role: "admin", familyId: null, hasPin: true },
-  { id: 2, name: "Ээж", role: "parent", familyId: 1, hasPin: true },
-  { id: 3, name: "Аав", role: "parent", familyId: 1, hasPin: false },
-  { id: 4, name: "Тувшин", role: "child", familyId: 1, hasPin: true },
-  { id: 5, name: "Номин", role: "child", familyId: 1, hasPin: true },
+  // supabase/04_seed.sql-ийн туршилтын хэрэглэгчидтэй ижил (Батын гэр)
+  { id: 1, username: "admin", name: "Админ", role: "admin", familyId: null, hasPin: true },
+  { id: 2, username: "bat_eej", name: "Ээж", role: "parent", familyId: 1, hasPin: true },
+  { id: 3, username: "bat_aav", name: "Аав", role: "parent", familyId: 1, hasPin: true },
+  { id: 4, username: "bat_tuvshin", name: "Түвшин", role: "child", familyId: 1, hasPin: true },
+  { id: 5, username: "bat_saraa", name: "Сараа", role: "child", familyId: 1, hasPin: false },
 ];
 
-// Туршилтын PIN. Жинхэнэ системд PIN-ийг шифрлэж хадгална.
+// Туршилтын PIN (seed-тэй ижил). Жинхэнэ системд PIN-ийг Supabase Auth шифрлэж хадгална.
 export const DEMO_PIN = "1234";
 
 // TODO(Гишүүн 3): нэвтэрсэн хэрэглэгчийг session-оос авна.
@@ -108,9 +110,9 @@ export const memberName = (id: number | null) => members.find((m) => m.id === id
 export const familyName = (id: number | null) => families.find((f) => f.id === id)?.name ?? "";
 export const initials = (name: string) => name.slice(0, 2).toUpperCase();
 
-export function findMemberByName(name: string) {
-  const n = name.trim().toLowerCase();
-  return members.find((m) => m.name.toLowerCase() === n) ?? null;
+export function findMemberByUsername(username: string) {
+  const n = username.trim().toLowerCase();
+  return members.find((m) => m.username === n) ?? null;
 }
 
 /** Тухайн өдөр хийх ажлууд: өдөр бүрийн, тэр гарагийн, тэр өдрийн нэг удаагийн. */
