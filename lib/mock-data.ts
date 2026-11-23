@@ -1,4 +1,4 @@
-// ЖИШЭЭ ӨГӨГДӨЛ — зөвхөн 1-р долоо хоногийн харагдацад зориулсан.
+// ЖИШЭЭ ӨГӨГДӨЛ — хуудсуудын харагдацыг Supabase холбогдохоос өмнө турших зориулалттай.
 // TODO(Гишүүн 2, 3): эдгээрийг Supabase-ийн хүснэгтүүдээс уншдаг болгоно.
 
 export type Role = "admin" | "parent" | "child";
@@ -20,7 +20,15 @@ export type Chore = {
   onceOffset?: number; // нэг удаагийн ажил өнөөдрөөс хэд хоногийн дараа
 };
 
-export type ShoppingItem = { id: number; text: string; qty: string; orderedBy: number; got: boolean };
+export type ShoppingItem = {
+  id: number;
+  text: string;
+  qty: string;
+  orderedBy: number | null;
+  got: boolean;
+  gotBy?: number | null;
+  gotAt?: string; // "17:40"
+};
 
 export type Plan = { id: number; memberId: number; dayOffset: number; from: string; to: string; text: string };
 
@@ -60,7 +68,7 @@ export const shopping: ShoppingItem[] = [
   { id: 21, text: "Сүү", qty: "2 л", orderedBy: 2, got: false },
   { id: 22, text: "Талх", qty: "1 ш", orderedBy: 4, got: false },
   { id: 23, text: "Өндөг", qty: "10 ш", orderedBy: 3, got: false },
-  { id: 24, text: "Будаа", qty: "1 кг", orderedBy: 4, got: true },
+  { id: 24, text: "Будаа", qty: "1 кг", orderedBy: 4, got: true, gotBy: 2, gotAt: "17:40" },
 ];
 
 export const plans: Plan[] = [
@@ -106,15 +114,24 @@ export function findMemberByName(name: string) {
 }
 
 /** Тухайн өдөр хийх ажлууд: өдөр бүрийн, тэр гарагийн, тэр өдрийн нэг удаагийн. */
-export function choresOn(dayOffset: number, weekday: number, familyId: number | null) {
+export function choresOn(list: Chore[], dayOffset: number, weekday: number, familyId: number | null) {
   const familyMemberIds = new Set(members.filter((m) => m.familyId === familyId).map((m) => m.id));
-  return chores.filter(
+  return list.filter(
     (c) =>
       (c.memberId === null || familyMemberIds.has(c.memberId)) &&
       (c.mode === "daily" ||
         (c.mode === "weekly" && c.days.includes(weekday)) ||
         (c.mode === "once" && c.onceOffset === dayOffset)),
   );
+}
+
+/** Давтамжийн бичиг: "Өдөр бүр", "Да, Лх, Ба", "11/26 · нэг удаа" */
+export function freqText(c: Chore, today: Date | null) {
+  if (c.mode === "daily") return "Өдөр бүр";
+  if (c.mode === "weekly") return [...c.days].sort().map((d) => WEEKDAYS_SHORT[d - 1]).join(", ");
+  if (!today || c.onceOffset === undefined) return "Нэг удаа";
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + c.onceOffset);
+  return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} · нэг удаа`;
 }
 
 export const isValidPin = (pin: string) => /^\d{4,8}$/.test(pin);
