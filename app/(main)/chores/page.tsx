@@ -1,5 +1,8 @@
-import ComingSoon from "@/components/ComingSoon";
+import type { Metadata } from "next";
+import ChoresView from "./ChoresView";
+
+export const metadata: Metadata = { title: "Гэрийн ажил · Манай гэр" };
 
 export default function ChoresPage() {
-  return <ComingSoon title="Гэрийн ажил" week={2} what="Гишүүн бүрийн ажил, ажил өгөх, засах, устгах" />;
+  return <ChoresView />;
 }

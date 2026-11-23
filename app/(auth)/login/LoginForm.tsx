@@ -1,90 +1,96 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Avatar, Button, ErrorText, Field } from "@/components/ui";
-import { DEMO_PIN, ROLE_NAMES, familyName, findMemberByName, isValidPin, type Member } from "@/lib/mock-data";
+import { Button, ErrorText } from "@/components/ui";
+import { checkName, createPin, login, type Role } from "@/lib/auth-api";
+import { PIN_RE, USE_MOCK } from "@/lib/auth-shared";
 
 // Нэвтрэх урсгал (UC02, activity A1):
-//   1. Нэр оруулах  →  2a. PIN оруулах  эсвэл  2b. PIN үүсгэх (анх удаа)
-// TODO(Гишүүн 3): findMemberByName, PIN шалгах, PIN хадгалахыг Supabase-ээр солино.
+//   1. Нэр оруулах → 2а. PIN оруулах эсвэл 2б. PIN үүсгэх (анх удаа)
+// Логик: Гишүүн 3 · Харагдац: Figma (Гишүүн 1)
 type Step = "name" | "pin" | "create";
+
+const inputClass =
+  "h-10 w-full rounded-md border border-line bg-white px-3 text-base placeholder:text-muted focus:outline-2 focus:outline-dark";
+
+function PinDots({ length }: { length: number }) {
+  return (
+    <div className="flex justify-center gap-2" aria-hidden="true">
+      {Array.from({ length: 8 }, (_, i) => (
+        <span key={i} className={`size-2.5 rounded-full border-2 transition-colors ${i < length ? "border-dark bg-dark" : "border-line"}`} />
+      ))}
+    </div>
+  );
+}
 
 export default function LoginForm() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("name");
-  const [member, setMember] = useState<Member | null>(null);
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [pin, setPin] = useState("");
+  const [pin2, setPin2] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function finish(m: Member) {
-    router.push(m.role === "admin" ? "/admin" : "/");
+  const digits = (v: string) => v.replace(/\D/g, "").slice(0, 8);
+
+  function goHome(role: Role) {
+    router.push(role === "admin" ? "/admin" : "/");
+    router.refresh();
   }
 
   function backToName() {
     setStep("name");
-    setMember(null);
+    setPin("");
+    setPin2("");
     setError("");
   }
 
-  function submitName(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const name = String(new FormData(e.currentTarget).get("name") ?? "");
-    if (!name.trim()) return setError("Нэрээ бичнэ үү");
-    const m = findMemberByName(name);
-    if (!m) return setError("Ийм нэртэй бүртгэл олдсонгүй");
-    setMember(m);
+  async function run(action: () => Promise<void>) {
     setError("");
-    setStep(m.hasPin ? "pin" : "create");
+    setLoading(true);
+    try {
+      await action();
+    } catch {
+      setError("Холбогдож чадсангүй. Дахин оролдоно уу.");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function submitPin(e: React.FormEvent<HTMLFormElement>) {
+  function onName(e: FormEvent) {
     e.preventDefault();
-    const pin = String(new FormData(e.currentTarget).get("pin") ?? "");
-    if (pin !== DEMO_PIN) return setError("PIN код буруу байна");
-    finish(member!);
+    if (!username.trim()) return setError("Нэвтрэх нэрээ бичнэ үү.");
+    run(async () => {
+      const res = await checkName(username);
+      if (res.status === "not_found") return setError("Ийм нэртэй бүртгэл олдсонгүй. Админаас нэрээ асууна уу.");
+      setDisplayName(res.name);
+      setStep(res.status === "has_pin" ? "pin" : "create");
+    });
   }
 
-  function submitCreate(e: React.FormEvent<HTMLFormElement>) {
+  function onPin(e: FormEvent) {
     e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    const pin = String(data.get("pin") ?? "");
-    const pin2 = String(data.get("pin2") ?? "");
-    if (!isValidPin(pin)) return setError("PIN код 4–8 оронтой тоо байна");
-    if (pin !== pin2) return setError("PIN кодууд таарахгүй байна");
-    finish(member!);
+    if (!PIN_RE.test(pin)) return setError("PIN нь 4–8 оронтой тоо байна.");
+    run(async () => {
+      const res = await login(username, pin);
+      if (res.ok) goHome(res.role);
+      else setError(res.error);
+    });
   }
 
-  if (step === "name") {
-    return (
-      <form onSubmit={submitName} className="flex flex-col gap-4" noValidate>
-        <div className="mb-2 text-center">
-          <h1 className="text-3xl font-extrabold">Манай гэр</h1>
-          <p className="mt-1 text-muted">Админаас авсан нэрээ бичнэ үү</p>
-        </div>
-        <Field label="Нэр" id="name" name="name" placeholder="Жишээ нь: Ээж" autoComplete="username" autoFocus />
-        <ErrorText>{error}</ErrorText>
-        <Button type="submit" block>
-          Үргэлжлүүлэх
-        </Button>
-        <p className="rounded-md border border-dashed border-note bg-blue-50 px-3 py-2 text-xs text-note">
-          Туршилт: Ээж, Тувшин, Админ (PIN 1234). Аав анх нэвтэрч байгаа тул PIN үүсгэнэ.
-        </p>
-      </form>
-    );
+  function onCreate(e: FormEvent) {
+    e.preventDefault();
+    if (!PIN_RE.test(pin)) return setError("PIN нь 4–8 оронтой тоо байна.");
+    if (pin !== pin2) return setError("Хоёр PIN таарахгүй байна.");
+    run(async () => {
+      const res = await createPin(username, pin);
+      if (res.ok) goHome(res.role);
+      else setError(res.error);
+    });
   }
-
-  const memberRow = member && (
-    <div className="my-4 flex items-center gap-3 rounded-lg bg-bg px-4 py-3">
-      <Avatar name={member.name} />
-      <div>
-        <div className="text-[15px] font-bold">{member.name}</div>
-        <div className="text-xs text-muted">
-          {ROLE_NAMES[member.role]}
-          {member.familyId ? ` · ${familyName(member.familyId)}` : ""}
-        </div>
-      </div>
-    </div>
-  );
 
   const back = (
     <button type="button" onClick={backToName} className="mx-auto text-[13px] font-semibold hover:underline">
@@ -92,37 +98,112 @@ export default function LoginForm() {
     </button>
   );
 
-  if (step === "create") {
-    return (
-      <form onSubmit={submitCreate} className="flex flex-col gap-4" noValidate>
-        <div>
-          <h1 className="text-[26px] font-extrabold">PIN код үүсгэх</h1>
-          <p className="text-[13px] text-muted">Анх удаа нэвтэрч байна</p>
-          {memberRow}
-        </div>
-        <Field label="PIN код (4–8 оронтой тоо)" id="pin" name="pin" type="password" inputMode="numeric" maxLength={8} autoComplete="new-password" autoFocus />
-        <Field label="PIN кодоо давтана уу" id="pin2" name="pin2" type="password" inputMode="numeric" maxLength={8} autoComplete="new-password" />
-        <ErrorText>{error}</ErrorText>
-        <Button type="submit" block>
-          Хадгалаад нэвтрэх
-        </Button>
-        {back}
-      </form>
-    );
-  }
-
   return (
-    <form onSubmit={submitPin} className="flex flex-col gap-4" noValidate>
-      <div>
-        <h1 className="text-[26px] font-extrabold">Нэвтрэх</h1>
-        {memberRow}
+    <div className="flex flex-col gap-4">
+      <div className="mb-2 text-center">
+        <h1 className="text-3xl font-extrabold">Манай гэр</h1>
+        <p className="mt-1 text-muted">
+          {step === "name" && "Админаас авсан нэрээрээ нэвтэрнэ үү."}
+          {step === "pin" && `Сайн уу, ${displayName}. PIN кодоо оруулна уу.`}
+          {step === "create" && `Сайн уу, ${displayName}. Анх удаа орж байна, PIN код үүсгэнэ үү.`}
+        </p>
       </div>
-      <Field label="PIN код" id="pin" name="pin" type="password" inputMode="numeric" maxLength={8} autoComplete="current-password" autoFocus />
-      <ErrorText>{error}</ErrorText>
-      <Button type="submit" block>
-        Нэвтрэх
-      </Button>
-      {back}
-    </form>
+
+      {step === "name" && (
+        <form onSubmit={onName} className="flex flex-col gap-4" noValidate>
+          <div>
+            <label htmlFor="username" className="mb-1.5 block text-[13px] font-semibold">
+              Нэвтрэх нэр
+            </label>
+            <input
+              id="username"
+              className={inputClass}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              autoFocus
+              placeholder="Жишээ нь: bat_eej"
+            />
+          </div>
+          <ErrorText>{error}</ErrorText>
+          <Button type="submit" block disabled={loading}>
+            {loading ? "Шалгаж байна..." : "Үргэлжлүүлэх"}
+          </Button>
+          {USE_MOCK && (
+            <p className="rounded-md border border-dashed border-note bg-blue-50 px-3 py-2 text-xs text-note">
+              Туршилт: bat_eej, bat_tuvshin, admin (PIN 1234). bat_saraa анх нэвтэрч байгаа тул PIN үүсгэнэ.
+            </p>
+          )}
+        </form>
+      )}
+
+      {step === "pin" && (
+        <form onSubmit={onPin} className="flex flex-col gap-4" noValidate>
+          <div>
+            <label htmlFor="pin" className="mb-1.5 block text-[13px] font-semibold">
+              PIN код
+            </label>
+            <input
+              id="pin"
+              className={`${inputClass} text-center tracking-[0.4em]`}
+              type="password"
+              inputMode="numeric"
+              autoComplete="current-password"
+              value={pin}
+              onChange={(e) => setPin(digits(e.target.value))}
+              autoFocus
+            />
+          </div>
+          <PinDots length={pin.length} />
+          <ErrorText>{error}</ErrorText>
+          <Button type="submit" block disabled={loading}>
+            {loading ? "Нэвтэрч байна..." : "Нэвтрэх"}
+          </Button>
+          {back}
+        </form>
+      )}
+
+      {step === "create" && (
+        <form onSubmit={onCreate} className="flex flex-col gap-4" noValidate>
+          <div>
+            <label htmlFor="pin" className="mb-1.5 block text-[13px] font-semibold">
+              Шинэ PIN (4–8 оронтой тоо)
+            </label>
+            <input
+              id="pin"
+              className={`${inputClass} text-center tracking-[0.4em]`}
+              type="password"
+              inputMode="numeric"
+              autoComplete="new-password"
+              value={pin}
+              onChange={(e) => setPin(digits(e.target.value))}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label htmlFor="pin2" className="mb-1.5 block text-[13px] font-semibold">
+              PIN-ээ давтаж оруулна уу
+            </label>
+            <input
+              id="pin2"
+              className={`${inputClass} text-center tracking-[0.4em]`}
+              type="password"
+              inputMode="numeric"
+              autoComplete="new-password"
+              value={pin2}
+              onChange={(e) => setPin2(digits(e.target.value))}
+            />
+          </div>
+          <PinDots length={pin.length} />
+          <ErrorText>{error}</ErrorText>
+          <Button type="submit" block disabled={loading}>
+            {loading ? "Хадгалж байна..." : "PIN хадгалаад нэвтрэх"}
+          </Button>
+          {back}
+        </form>
+      )}
+    </div>
   );
 }

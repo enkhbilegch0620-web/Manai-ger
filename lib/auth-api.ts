@@ -1,57 +1,59 @@
-// lib/auth-api.ts
-// Temporary version for testing: USE_MOCK = true works without Supabase.
-// Once your team chooses the login method, replace the 3 TODO functions.
+// Нэвтрэх хуудасны функцууд (Гишүүн 3).
+// .env.local-д Supabase-ийн түлхүүр байвал Supabase-ээр, байхгүй бол lib/mock-data.ts-ийн
+// туршилтын хэрэглэгчдээр ажиллана. Хоёулаа supabase/04_seed.sql-тэй ижил нэр, PIN-тэй.
 
-export type Role = "admin" | "parent" | "child";
+import { setFirstPin } from "@/app/(auth)/login/actions";
+import { USE_MOCK, toEmail, toPassword } from "@/lib/auth-shared";
+import { DEMO_PIN, findMemberByUsername, type Role } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/client";
 
-export type NameCheck =
-  | { status: "not_found" }
-  | { status: "has_pin"; name: string }
-  | { status: "needs_pin"; name: string };
+export type { Role };
+
+export type NameCheck = { status: "not_found" } | { status: "has_pin"; name: string } | { status: "needs_pin"; name: string };
 
 export type AuthResult = { ok: true; role: Role } | { ok: false; error: string };
 
-const USE_MOCK = true;
+const WRONG_PIN = "PIN код буруу байна.";
 
-// ---------- Test data (only used when USE_MOCK = true) ----------
-const mockUsers: Record<string, { name: string; role: Role; pin: string | null }> = {
-  admin: { name: "admin", role: "admin", pin: "1234" },
-  bat: { name: "Бат", role: "parent", pin: "1234" },
-  saraa: { name: "Сараа", role: "child", pin: null },
-};
-const wait = (ms = 500) => new Promise((r) => setTimeout(r, ms));
-const key = (name: string) => name.trim().toLowerCase();
-
-export async function checkName(name: string): Promise<NameCheck> {
+/** 1-р алхам: нэр байгаа эсэх, PIN үүсгэсэн эсэхийг шалгана. */
+export async function checkName(username: string): Promise<NameCheck> {
   if (USE_MOCK) {
-    await wait();
-    const u = mockUsers[key(name)];
-    if (!u) return { status: "not_found" };
-    return u.pin ? { status: "has_pin", name: u.name } : { status: "needs_pin", name: u.name };
+    const m = findMemberByUsername(username);
+    if (!m) return { status: "not_found" };
+    return m.hasPin ? { status: "has_pin", name: m.name } : { status: "needs_pin", name: m.name };
   }
-  // TODO: look the name up in the `members` table (server action or API route)
-  throw new Error("checkName is not connected yet");
+  // Нэвтрээгүй хэрэглэгч profiles-ийг уншиж чадахгүй тул зөвхөн төлөвийг буцаадаг функцийг дуудна.
+  const { data, error } = await createClient().rpc("login_state", { p_username: username });
+  if (error) throw error;
+  if (data === "ok") return { status: "has_pin", name: username.trim().toLowerCase() };
+  if (data === "need_pin") return { status: "needs_pin", name: username.trim().toLowerCase() };
+  return { status: "not_found" };
 }
 
-export async function login(name: string, pin: string): Promise<AuthResult> {
+/** 2а алхам: PIN-ээр нэвтрэх. */
+export async function login(username: string, pin: string): Promise<AuthResult> {
   if (USE_MOCK) {
-    await wait();
-    const u = mockUsers[key(name)];
-    if (!u || u.pin !== pin) return { ok: false, error: "PIN код буруу байна." };
-    return { ok: true, role: u.role };
+    const m = findMemberByUsername(username);
+    if (!m || !m.hasPin || pin !== DEMO_PIN) return { ok: false, error: WRONG_PIN };
+    return { ok: true, role: m.role };
   }
-  // TODO: Supabase Auth (method A) or your own pins table (method B)
-  throw new Error("login is not connected yet");
+  const { data, error } = await createClient().auth.signInWithPassword({
+    email: toEmail(username),
+    password: toPassword(pin),
+  });
+  if (error || !data.user) return { ok: false, error: WRONG_PIN };
+  const role = data.user.app_metadata?.role as Role | undefined;
+  return { ok: true, role: role ?? "child" };
 }
 
-export async function createPin(name: string, pin: string): Promise<AuthResult> {
+/** 2б алхам: анх нэвтрэхэд PIN үүсгээд шууд нэвтэрнэ. */
+export async function createPin(username: string, pin: string): Promise<AuthResult> {
   if (USE_MOCK) {
-    await wait();
-    const u = mockUsers[key(name)];
-    if (!u) return { ok: false, error: "Ийм нэртэй бүртгэл олдсонгүй." };
-    u.pin = pin;
-    return { ok: true, role: u.role };
+    const m = findMemberByUsername(username);
+    if (!m) return { ok: false, error: "Ийм нэртэй бүртгэл олдсонгүй." };
+    return { ok: true, role: m.role };
   }
-  // TODO: hash the PIN and save it
-  throw new Error("createPin is not connected yet");
+  const saved = await setFirstPin(username, pin);
+  if (!saved.ok) return saved;
+  return login(username, pin);
 }

@@ -1,63 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import { Avatar, Card, CardTitle, Tag } from "@/components/ui";
-import {
-  WEEKDAYS,
-  WEEKDAYS_SHORT,
-  choresOn,
-  currentUser,
-  memberName,
-  plans,
-  shopping,
-  weekdayOf,
-} from "@/lib/mock-data";
-
-// Өнөөдрийн огноог зөвхөн хөтөч дээр уншина (сервер, хөтөч хоёрын цаг зөрөхөөс сэргийлнэ).
-const noopSubscribe = () => () => {};
-const todayKey = () => new Date().toDateString();
-function useToday() {
-  const key = useSyncExternalStore(noopSubscribe, todayKey, () => "");
-  return key ? new Date(key) : null;
-}
-const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+import { WEEKDAYS, WEEKDAYS_SHORT, choresOn, currentUser, memberName, plans, weekdayOf } from "@/lib/mock-data";
+import { useStore } from "@/lib/store";
+import { addDays, nowHM, useToday } from "@/lib/useToday";
 
 export default function HomeView() {
   const today = useToday();
   const user = currentUser;
   const [offset, setOffset] = useState(0);
-  // TODO(Гишүүн 3): chore_done, shopping хүснэгтээс уншиж, өөрчлөлтийг хадгална.
-  const [doneBy, setDoneBy] = useState(() => new Map<string, number>([["14|0", 2]]));
-  const [got, setGot] = useState(() => new Set(shopping.filter((s) => s.got).map((s) => s.id)));
+  const store = useStore();
 
   if (!today) return <div className="h-96" aria-busy="true" />;
 
   const day = addDays(today, offset);
   const wd = weekdayOf(day);
-  const list = choresOn(offset, wd, user.familyId)
-    .map((c) => ({ c, by: doneBy.get(`${c.id}|${offset}`) }))
+  const list = choresOn(store.chores, offset, wd, user.familyId)
+    .map((c) => ({ c, by: store.doneBy[`${c.id}|${offset}`] }))
     .sort((a, b) => Number(!!a.by) - Number(!!b.by) || Number(b.c.memberId === user.id) - Number(a.c.memberId === user.id));
   const left = list.filter((x) => !x.by).length;
   const mine = list.filter((x) => x.c.memberId === user.id);
   const mineLeft = mine.filter((x) => !x.by);
-  const items = shopping.filter((s) => !got.has(s.id));
+  const items = store.items.filter((s) => !s.got);
   const myPlans = plans.filter((p) => p.memberId === user.id && p.dayOffset === offset).sort((a, b) => a.from.localeCompare(b.from));
   const isToday = offset === 0;
 
-  function toggleChore(id: number) {
-    setDoneBy((prev) => {
-      const next = new Map(prev);
-      const key = `${id}|${offset}`;
-      if (next.has(key)) next.delete(key);
-      else next.set(key, user.id);
-      return next;
-    });
-  }
-
-  function markGot(id: number) {
-    setGot((prev) => new Set(prev).add(id));
-  }
+  const toggleChore = (id: number) => store.toggleDone(id, offset, user.id);
+  const markGot = (id: number) => store.toggleGot(id, user.id, nowHM());
 
   return (
     <div>
